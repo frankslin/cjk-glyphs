@@ -335,8 +335,10 @@ function renderUnavailable() {
 }
 
 function shouldRenderInColumn(row, column) {
-  if (column.region === 'jp') return row.scripts.includes('jp');
-  return row.scripts.includes('zh');
+  if (column.region !== 'jp') return true;
+  // Japanese uses traditional-based forms; purely simplified characters don't exist in Japanese
+  if (row.scripts.includes('jp')) return true;
+  return row.group !== '簡體';
 }
 
 function renderUnicodeButton(value) {
