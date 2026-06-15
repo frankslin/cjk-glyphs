@@ -17,24 +17,26 @@
       <header>
         <h1>漢字字形對比</h1>
         <p>
-          輸入一個漢字，結合 OpenCC 字表推斷簡繁日文候選，再用 Noto Serif/Sans 的 SC、HK、TC、JP 字形渲染。
+          輸入一個漢字，查詢 OpenCC CDN 字表中的關聯字，再用 Noto Serif/Sans 的 SC、HK、TC、JP 字形渲染。
         </p>
       </header>
 
       <section class="controls" aria-label="input">
         <label for="charInput">輸入字</label>
-        <input id="charInput" value="里" autocomplete="off" />
-        <label for="familySelect">字體</label>
-        <select id="familySelect">
-          <option value="serif">Serif</option>
-          <option value="sans">Sans</option>
-        </select>
+        <input id="charInput" value="图" autocomplete="off" />
+        <span class="control-label">字體</span>
+        <fieldset class="font-options" id="familySelect" aria-label="字體">
+          <label><input type="radio" name="fontFamily" value="serif" checked /> Serif</label>
+          <label><input type="radio" name="fontFamily" value="sans" /> Sans</label>
+        </fieldset>
         <button id="renderButton">對比</button>
+        <button id="randomButton" type="button">隨機</button>
+        <div id="randomCandidates" class="random-candidates" aria-label="隨機候選"></div>
       </section>
 
       <section class="panel">
         <h2>字形對比</h2>
-        <div id="mappingStatus" class="status">Loading opencc-js…</div>
+        <div id="mappingStatus" class="status">Loading OpenCC CDN dictionaries…</div>
         <table class="glyph-table">
           <thead id="glyphHead"></thead>
           <tbody id="glyphBody"></tbody>
@@ -44,15 +46,13 @@
       <section class="notes">
         <h2>限制</h2>
         <ul>
-          <li>一對多候選來自 OpenCC 字表；若字表載入失敗，會回退到 opencc-js 的單值轉換。</li>
-          <li>日本候選使用 OpenCC 的 t2jp / jp2t 字表正反查推斷。</li>
-          <li>Google Fonts 載入 Noto Serif/Sans SC、HK、TC、JP，用於對比不同地區字形。</li>
-          <li>同一 Unicode 字元在不同地區字型中的字形 (glyph) 差異，與不同 Unicode 字元之間的對應關係，是兩個層面。</li>
+          <li>候選字與「簡體」「繁體」「日文」等標籤由字表關係推斷，判定不一定準確，僅供參考。</li>
+          <li>字形顯示取決於瀏覽器載入的字型；同一字元在不同地區字型中可能呈現不同寫法。</li>
+          <li>這個工具適合快速對照字形與相關字，不應作為正式文字標準依據。</li>
         </ul>
       </section>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.3.2-next.0/dist/umd/full.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

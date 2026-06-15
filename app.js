@@ -33,38 +33,31 @@ const FONT_COLUMNS = [
   },
 ];
 
-const CONVERTER_SPECS = [
-  ['s2t: cn → t', { from: 'cn', to: 't' }],
-  ['s2tw: cn → tw', { from: 'cn', to: 'tw' }],
-  ['s2hk: cn → hk', { from: 'cn', to: 'hk' }],
-  ['t2s: t → cn', { from: 't', to: 'cn' }],
-  ['tw2s: tw → cn', { from: 'tw', to: 'cn' }],
-  ['hk2s: hk → cn', { from: 'hk', to: 'cn' }],
-];
-const CONVERTER_NAMES = CONVERTER_SPECS.map(([label]) => label.split(':')[0]);
-const DICTIONARY_CONVERTER_NAMES = [...CONVERTER_NAMES, 't2jp', 'jp2t'];
 const MAX_CANDIDATE_POOL_SIZE = 256;
 
 const DICTIONARY_SOURCES = {
   st: 'https://cdn.jsdelivr.net/gh/BYVoid/OpenCC@master/data/dictionary/STCharacters.txt',
   ts: 'https://cdn.jsdelivr.net/gh/BYVoid/OpenCC@master/data/dictionary/TSCharacters.txt',
+  jp: 'https://cdn.jsdelivr.net/gh/BYVoid/OpenCC@master/data/dictionary/JPShinjitaiCharacters.txt',
   tw: 'https://cdn.jsdelivr.net/gh/BYVoid/OpenCC@master/data/dictionary/TWVariants.txt',
   hk: 'https://cdn.jsdelivr.net/gh/BYVoid/OpenCC@master/data/dictionary/HKVariants.txt',
-  t2jp: 'https://cdn.jsdelivr.net/gh/BYVoid/OpenCC@master/data/dictionary/JPVariants.txt',
-  jp2t: 'https://cdn.jsdelivr.net/gh/BYVoid/OpenCC@master/data/dictionary/JPShinjitaiCharacters.txt',
 };
 
 const input = document.querySelector('#charInput');
 const familySelect = document.querySelector('#familySelect');
 const renderButton = document.querySelector('#renderButton');
+const randomButton = document.querySelector('#randomButton');
+const randomCandidates = document.querySelector('#randomCandidates');
 const mappingStatus = document.querySelector('#mappingStatus');
 const glyphHead = document.querySelector('#glyphHead');
 const glyphBody = document.querySelector('#glyphBody');
 
 let isComposing = false;
-const converterMap = new Map();
 const dictionaryMap = new Map();
-const reverseDictionaryMap = new Map();
+const rowMap = new Map();
+const relationMap = new Map();
+const tofuRiskChars = new Set();
+let randomSourceChars = [];
 
 function firstCodePoint(text) {
   return [...text.trim()][0] || '';
@@ -81,25 +74,47 @@ function escapeHtml(text) {
 }
 
 function parseDictionary(text) {
-  const dictionary = new Map();
+  const rows = [];
+  let comment = '';
+
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (!trimmed) {
+      comment = '';
+      continue;
+    }
+    if (trimmed.startsWith('#')) {
+      const body = trimmed.replace(/^#+\s?/, '');
+      if (body) comment = comment ? `${comment}\n${body}` : body;
+      continue;
+    }
+
     const [key, ...values] = trimmed.split(/\s+/);
-    if (!key || !values.length) continue;
-    dictionary.set(key, values);
+    const forms = unique([key, ...values]).filter((value) => [...value].length === 1);
+    if (forms.length >= 2) rows.push({ key, values, forms, comment });
+    comment = '';
   }
-  return dictionary;
+
+  return rows;
 }
 
-function reverseDictionary(dictionary) {
-  const reversed = new Map();
-  for (const [key, values] of dictionary) {
-    for (const value of values) {
-      reversed.set(value, unique([...(reversed.get(value) || []), key]));
+function indexRows(name, rows) {
+  rowMap.set(name, rows);
+  for (const row of rows) {
+    if (row.comment.includes('@tofu-risk')) {
+      for (const form of row.forms) tofuRiskChars.add(form);
+    }
+    for (const form of row.forms) {
+      if (!relationMap.has(form)) relationMap.set(form, []);
+      relationMap.get(form).push({ source: name, row });
     }
   }
-  return reversed;
+}
+
+function updateRandomSourceChars() {
+  randomSourceChars = unique([...rowMap.values()].flatMap((rows) => (
+    rows.flatMap((row) => row.forms)
+  ))).filter((value) => !tofuRiskChars.has(value));
 }
 
 async function initDictionaries() {
@@ -119,86 +134,76 @@ async function initDictionaries() {
     if (!entry) continue;
     const [name, dictionary] = entry;
     dictionaryMap.set(name, dictionary);
-    reverseDictionaryMap.set(name, reverseDictionary(dictionary));
+    indexRows(name, dictionary);
     loaded.push(name);
   }
+
+  updateRandomSourceChars();
 
   if (!loaded.length) throw new Error('No OpenCC dictionaries loaded');
   return loaded;
 }
 
-function initConverters() {
-  if (!window.OpenCC) {
-    mappingStatus.textContent = 'opencc-js 未載入；請確認網路或 CDN。';
-    return;
-  }
-
-  CONVERTER_SPECS.forEach(([label, options]) => {
-    try {
-      const converter = OpenCC.Converter(options);
-      converterMap.set(label.split(':')[0], converter);
-    } catch (error) {
-      console.warn(`OpenCC converter failed: ${label}`, error);
-    }
-  });
-
-  mappingStatus.textContent = 'opencc-js loaded.';
-}
-
-function valuesFromDictionary(name, text) {
-  return dictionaryMap.get(name)?.get(text) || [];
-}
-
-function valuesFromReverseDictionary(name, text) {
-  return reverseDictionaryMap.get(name)?.get(text) || [];
-}
-
-function convertWith(name, text) {
-  const converter = converterMap.get(name);
-  if (!converter) return text;
-  try { return converter(text); } catch { return text; }
-}
-
-function convertManyWith(name, text) {
-  const dictionaryValues = {
-    s2t: () => valuesFromDictionary('st', text),
-    t2s: () => unique([
-      ...valuesFromDictionary('ts', text),
-      ...valuesFromReverseDictionary('st', text),
-    ]),
-    s2tw: () => unique([
-      ...valuesFromDictionary('tw', text),
-      ...valuesFromDictionary('st', text).flatMap((value) => valuesFromDictionary('tw', value)),
-    ]),
-    tw2s: () => unique([
-      ...valuesFromReverseDictionary('tw', text).flatMap((value) => valuesFromDictionary('ts', value)),
-      ...valuesFromDictionary('ts', text),
-    ]),
-    s2hk: () => unique([
-      ...valuesFromDictionary('hk', text),
-      ...valuesFromDictionary('st', text).flatMap((value) => valuesFromDictionary('hk', value)),
-    ]),
-    hk2s: () => unique([
-      ...valuesFromReverseDictionary('hk', text).flatMap((value) => valuesFromDictionary('ts', value)),
-      ...valuesFromDictionary('ts', text),
-    ]),
-    t2jp: () => unique([
-      ...valuesFromDictionary('t2jp', text),
-      ...valuesFromReverseDictionary('jp2t', text),
-    ]),
-    jp2t: () => unique([
-      ...valuesFromDictionary('jp2t', text),
-      ...valuesFromReverseDictionary('t2jp', text),
-    ]),
-  }[name]?.() || [];
-
-  if (dictionaryValues.length) return dictionaryValues;
-  const converted = convertWith(name, text);
-  return converted === text ? [] : [converted];
-}
-
 function unique(values) {
   return [...new Set(values.filter(Boolean))];
+}
+
+function rowsForSource(name, ch) {
+  return (relationMap.get(ch) || []).filter((item) => item.source === name).map((item) => item.row);
+}
+
+function relatedForms(name, ch) {
+  return unique(rowsForSource(name, ch).flatMap((row) => row.forms));
+}
+
+function sourceKeys(name, ch) {
+  return unique(rowsForSource(name, ch).map((row) => row.key));
+}
+
+function sourceValues(name, ch) {
+  return unique(rowsForSource(name, ch).flatMap((row) => row.values));
+}
+
+function sourceComments(name, ch) {
+  return unique(rowsForSource(name, ch).map((row) => row.comment).filter(Boolean));
+}
+
+function isCompatibilityRow(row) {
+  return row.comment.includes('Preserved for compatibility');
+}
+
+function isCommentedAsChineseOnly(row, form) {
+  const formLine = row.comment.split('\n').find((line) => line.includes(`「${form}」`));
+  if (!formLine) return false;
+  return /繁體中文|既非常用漢字也非人名用漢字|不可用於日本人|映射相容/.test(formLine);
+}
+
+function chineseOnlyJapaneseDictionaryForms(row) {
+  const compatibilityForms = isCompatibilityRow(row)
+    ? row.forms.filter((value) => value !== row.key)
+    : [];
+  const commentedForms = row.forms.filter((value) => isCommentedAsChineseOnly(row, value));
+  return unique([...compatibilityForms, ...commentedForms]);
+}
+
+function japaneseForms(ch) {
+  return unique(rowsForSource('jp', ch).flatMap((row) => (
+    row.forms.filter((value) => !chineseOnlyJapaneseDictionaryForms(row).includes(value))
+  )));
+}
+
+function japaneseChineseForms(ch) {
+  return unique(rowsForSource('jp', ch).flatMap((row) => (
+    chineseOnlyJapaneseDictionaryForms(row)
+  )));
+}
+
+function collectRelated(ch) {
+  return unique((relationMap.get(ch) || []).flatMap(({ row }) => row.forms));
+}
+
+function hasDictionaryRelation(ch) {
+  return (relationMap.get(ch) || []).length > 0;
 }
 
 function buildCandidatePool(ch) {
@@ -207,13 +212,10 @@ function buildCandidatePool(ch) {
 
   while (queue.length && pool.size < MAX_CANDIDATE_POOL_SIZE) {
     const value = queue.shift();
-    for (const name of DICTIONARY_CONVERTER_NAMES) {
-      for (const converted of convertManyWith(name, value)) {
-        if ([...converted].length !== 1 || pool.has(converted)) continue;
-        pool.add(converted);
-        queue.push(converted);
-        if (pool.size >= MAX_CANDIDATE_POOL_SIZE) break;
-      }
+    for (const related of collectRelated(value)) {
+      if (pool.has(related)) continue;
+      pool.add(related);
+      queue.push(related);
       if (pool.size >= MAX_CANDIDATE_POOL_SIZE) break;
     }
   }
@@ -223,90 +225,73 @@ function buildCandidatePool(ch) {
 
 function candidates(values, fallback) {
   const filtered = unique(values).filter((value) => [...value].length === 1);
-  return filtered.length ? filtered : [fallback];
+  return filtered.length ? filtered : (fallback ? [fallback] : []);
 }
 
-function inferForms(ch) {
-  const pool = buildCandidatePool(ch);
-  const simplified = candidates([
-    ...convertManyWith('t2s', ch),
-    ...convertManyWith('tw2s', ch),
-    ...convertManyWith('hk2s', ch),
-    ...convertManyWith('jp2t', ch).flatMap((value) => convertManyWith('t2s', value)),
-    ...pool.flatMap((value) => convertManyWith('t2s', value)),
-    ...pool.flatMap((value) => convertManyWith('tw2s', value)),
-    ...pool.flatMap((value) => convertManyWith('hk2s', value)),
-    ...pool.flatMap((value) => (
-      convertManyWith('jp2t', value).flatMap((candidate) => convertManyWith('t2s', candidate))
-    )),
-  ], ch);
+function annotateCandidate(value) {
+  const groups = new Set();
+  const scripts = new Set();
+  const comments = [];
+  let verifiedChineseAttribute = false;
+  let jpChineseOnly = false;
 
-  const baseTraditional = candidates([
-    ...simplified.flatMap((value) => convertManyWith('s2t', value)),
-    ...convertManyWith('s2t', ch),
-    ...pool.flatMap((value) => convertManyWith('s2t', value)),
-  ], ch);
+  for (const { source, row } of relationMap.get(value) || []) {
+    if (source === 'st') {
+      if (row.key === value) groups.add('簡體');
+      if (row.values.includes(value)) groups.add('繁體');
+      scripts.add('zh');
+      verifiedChineseAttribute = true;
+    } else if (source === 'ts') {
+      if (row.key === value) groups.add('繁體');
+      if (row.values.includes(value)) groups.add('簡體');
+      scripts.add('zh');
+      verifiedChineseAttribute = true;
+    } else if (source === 'tw') {
+      groups.add('繁體');
+      scripts.add('zh');
+      verifiedChineseAttribute = true;
+    } else if (source === 'hk') {
+      groups.add('繁體');
+      scripts.add('zh');
+      verifiedChineseAttribute = true;
+    } else if (source === 'jp') {
+      if (japaneseForms(value).includes(value)) {
+        groups.add('日文');
+        scripts.add('jp');
+        if (row.comment) comments.push(row.comment);
+      }
+      if (japaneseChineseForms(value).includes(value)) {
+        jpChineseOnly = true;
+        scripts.add('zh');
+        if (row.comment) comments.push(row.comment);
+      }
+    }
+  }
+
+  if (jpChineseOnly && !verifiedChineseAttribute) {
+    groups.add('中文');
+  }
+
+  if (!groups.size) groups.add('通用');
+  if (!scripts.size) {
+    scripts.add('zh');
+    scripts.add('jp');
+  }
 
   return {
-    simplified,
-    traditional: {
-      jp: candidates([
-        ...simplified.flatMap((value) => (
-          convertManyWith('s2t', value).flatMap((candidate) => convertManyWith('t2jp', candidate))
-        )),
-        ...baseTraditional.flatMap((value) => convertManyWith('t2jp', value)),
-        ...convertManyWith('t2jp', ch),
-        ...pool.flatMap((value) => convertManyWith('t2jp', value)),
-      ], baseTraditional[0] || ch),
-      hk: candidates([
-        ...simplified.flatMap((value) => convertManyWith('s2hk', value)),
-        ...baseTraditional.flatMap((value) => convertManyWith('s2hk', value)),
-        ...convertManyWith('s2hk', ch),
-        ...pool.flatMap((value) => convertManyWith('s2hk', value)),
-      ], baseTraditional[0] || ch),
-      tw: candidates([
-        ...simplified.flatMap((value) => convertManyWith('s2tw', value)),
-        ...baseTraditional.flatMap((value) => convertManyWith('s2tw', value)),
-        ...convertManyWith('s2tw', ch),
-        ...pool.flatMap((value) => convertManyWith('s2tw', value)),
-      ], baseTraditional[0] || ch),
-      cn: baseTraditional,
-    },
+    group: [...groups].join(' / '),
+    scripts: [...scripts],
+    comments: unique(comments),
+    value,
   };
 }
 
 function buildRows(ch) {
-  const { simplified, traditional } = inferForms(ch);
-  const traditionalValues = unique([
-    ...traditional.hk,
-    ...traditional.tw,
-    ...traditional.cn,
-  ]);
-  const japaneseValues = traditional.jp;
-  const rowMap = new Map();
-
-  function addValues(group, region, values) {
-    for (const value of unique(values)) {
-      if (!rowMap.has(value)) {
-        rowMap.set(value, { groups: [], scripts: new Set() });
-      }
-      const row = rowMap.get(value);
-      row.groups.push(group);
-      row.scripts.add(region === 'jp' ? 'jp' : 'zh');
-    }
+  if (!hasDictionaryRelation(ch)) {
+    return [{ group: '通用', scripts: ['zh', 'jp'], comments: [], value: ch }];
   }
 
-  addValues('簡體', 'cn', simplified);
-  addValues('繁體', 'hk', traditional.hk);
-  addValues('繁體', 'tw', traditional.tw);
-  addValues('繁體', 'cn', traditionalValues);
-  addValues('日文', 'jp', japaneseValues);
-
-  const rows = [...rowMap].map(([value, row]) => ({
-    group: unique(row.groups).join(' / '),
-    scripts: [...row.scripts],
-    value,
-  }));
+  const rows = buildCandidatePool(ch).map(annotateCandidate);
 
   if (rows.length === 1) {
     return [{ group: '通用', scripts: rows[0].scripts, value: rows[0].value }];
@@ -350,8 +335,13 @@ function renderUnicodeButton(value) {
   `;
 }
 
+function renderComment(comments) {
+  if (!comments.length) return '';
+  return ` <span class="row-comment" title="${escapeHtml(comments.join('\n\n'))}">comment</span>`;
+}
+
 function renderGlyphTable(ch) {
-  const family = familySelect.value;
+  const family = document.querySelector('input[name="fontFamily"]:checked')?.value || 'serif';
   const rows = buildRows(ch);
 
   glyphHead.innerHTML = `
@@ -370,7 +360,7 @@ function renderGlyphTable(ch) {
     if (row.group !== previousGroup) tr.className = 'group-start';
     tr.innerHTML = `
       <th scope="row">${escapeHtml(row.group)}</th>
-      <td class="character-cell">${escapeHtml(row.value)}</td>
+      <td class="character-cell">${escapeHtml(row.value)}${renderComment(row.comments)}</td>
       <td>${renderUnicodeButton(row.value)}</td>
       ${FONT_COLUMNS.map((column) => `
         <td>${shouldRenderInColumn(row, column) ? renderGlyph(row.value, family, column) : renderUnavailable()}</td>
@@ -379,6 +369,39 @@ function renderGlyphTable(ch) {
     glyphBody.appendChild(tr);
     previousGroup = row.group;
   }
+}
+
+function pickRandomCandidates(count = 5) {
+  const source = randomSourceChars.slice();
+  const picked = [];
+
+  while (source.length && picked.length < count) {
+    const index = Math.floor(Math.random() * source.length);
+    const [candidate] = source.splice(index, 1);
+    picked.push(candidate);
+  }
+
+  return picked;
+}
+
+function setInputAndRender(ch) {
+  input.value = ch;
+  render();
+}
+
+function renderRandomCandidates(candidates, active) {
+  randomCandidates.innerHTML = candidates.map((candidate) => `
+    <button class="random-candidate${candidate === active ? ' active' : ''}" type="button" data-char="${escapeHtml(candidate)}" title="查看 ${escapeHtml(candidate)}">
+      ${escapeHtml(candidate)}
+    </button>
+  `).join('');
+}
+
+function refreshRandomCandidates() {
+  const candidates = pickRandomCandidates(5);
+  if (!candidates.length) return;
+  renderRandomCandidates(candidates, candidates[0]);
+  setInputAndRender(candidates[0]);
 }
 
 function render() {
@@ -399,6 +422,7 @@ if (glyphParam) {
 }
 
 renderButton.addEventListener('click', render);
+randomButton.addEventListener('click', refreshRandomCandidates);
 familySelect.addEventListener('change', render);
 input.addEventListener('compositionstart', () => {
   isComposing = true;
@@ -433,15 +457,24 @@ glyphBody.addEventListener('click', async (event) => {
     button.textContent = text;
   }, 900);
 });
+randomCandidates.addEventListener('click', (event) => {
+  const button = event.target.closest('.random-candidate');
+  if (!button) return;
+  const ch = button.dataset.char;
+  if (!ch) return;
+  for (const candidateButton of randomCandidates.querySelectorAll('.random-candidate')) {
+    candidateButton.classList.toggle('active', candidateButton === button);
+  }
+  setInputAndRender(ch);
+});
 
-initConverters();
 initDictionaries()
   .then((loaded) => {
-    mappingStatus.textContent = `opencc-js + OpenCC 字表 loaded (${loaded.join(', ')}).`;
+    mappingStatus.textContent = `OpenCC CDN 字表 loaded (${loaded.join(', ')}).`;
+    renderRandomCandidates(pickRandomCandidates(5), '');
   })
   .catch((error) => {
     console.warn('OpenCC dictionary load failed', error);
-    mappingStatus.textContent = 'opencc-js loaded. OpenCC 字表未載入，使用單值轉換。';
+    mappingStatus.textContent = 'OpenCC CDN 字表未載入。';
   })
   .finally(render);
-

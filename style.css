@@ -52,11 +52,13 @@ p {
 
 .controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
   margin: 28px 0;
 }
 
+.control-label,
 label {
   font-weight: 700;
 }
@@ -78,6 +80,36 @@ select {
   font-size: 18px;
 }
 
+.font-options {
+  display: inline-flex;
+  gap: 4px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.font-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.font-options label:has(input:checked) {
+  background: var(--bg);
+}
+
+.font-options input {
+  width: auto;
+  margin: 0;
+}
+
 button {
   padding: 10px 16px;
   border: 1px solid var(--border);
@@ -89,6 +121,26 @@ button {
 
 button:hover {
   border-color: currentColor;
+}
+
+.random-candidates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 42px;
+  align-items: center;
+}
+
+.random-candidate {
+  min-width: 42px;
+  padding: 6px 10px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.random-candidate.active {
+  border-color: currentColor;
+  background: var(--bg);
 }
 
 .panel,
@@ -145,8 +197,17 @@ button:hover {
 
   input,
   select,
-  button {
+  button,
+  .font-options {
     width: 100%;
+  }
+
+  .random-candidates {
+    width: 100%;
+  }
+
+  .random-candidate {
+    width: auto;
   }
 
   .glyph-table {
@@ -188,6 +249,15 @@ button:hover {
   border-radius: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
+}
+
+.row-comment {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
 }
 
 .serif.noto-sc {
