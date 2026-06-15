@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>漢字字形對比 prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+HK:wght@400;700&family=Noto+Sans+SC:wght@400;700&family=Noto+Sans+TC:wght@400;700&family=Noto+Serif+HK:wght@400;700&family=Noto+Serif+SC:wght@400;700&family=Noto+Serif+TC:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>漢字字形對比 prototype</h1>
+        <p>
+          輸入一個漢字，結合 opencc-js 與 OpenCC 字表推斷簡繁候選，再用 Noto Serif/Sans 的 SC、TC、HK 字形渲染。
+        </p>
+      </header>
+
+      <section class="controls" aria-label="input">
+        <label for="charInput">輸入字</label>
+        <input id="charInput" value="里" autocomplete="off" />
+        <label for="familySelect">字體</label>
+        <select id="familySelect">
+          <option value="serif">Serif</option>
+          <option value="sans">Sans</option>
+        </select>
+        <button id="renderButton">對比</button>
+      </section>
+
+      <section class="panel">
+        <h2>字形對比</h2>
+        <div id="mappingStatus" class="status">Loading opencc-js…</div>
+        <table class="glyph-table">
+          <thead id="glyphHead"></thead>
+          <tbody id="glyphBody"></tbody>
+        </table>
+      </section>
+
+      <section class="notes">
+        <h2>限制</h2>
+        <ul>
+          <li>一對多候選來自 OpenCC 字表；若字表載入失敗，會回退到 opencc-js 的單值轉換。</li>
+          <li>Google Fonts 載入 Noto Serif/Sans SC、TC、HK，用於對比不同地區字形。</li>
+          <li>同一 Unicode 字符在不同地區字體中的 glyph 差異，和不同 Unicode 字符之間的映射，是兩個層面。</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
