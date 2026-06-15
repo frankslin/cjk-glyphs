@@ -383,6 +383,17 @@ function render() {
   const ch = firstCodePoint(input.value);
   if (!ch) return;
   renderGlyphTable(ch);
+  const url = new URL(window.location);
+  if (url.searchParams.get('glyph') !== ch) {
+    url.searchParams.set('glyph', ch);
+    history.replaceState(null, '', url);
+  }
+}
+
+const glyphParam = new URLSearchParams(window.location.search).get('glyph');
+if (glyphParam) {
+  const ch = firstCodePoint(glyphParam);
+  if (ch) input.value = ch;
 }
 
 renderButton.addEventListener('click', render);
@@ -431,3 +442,4 @@ initDictionaries()
     mappingStatus.textContent = 'opencc-js loaded. OpenCC 字表未載入，使用單值轉換。';
   })
   .finally(render);
+
