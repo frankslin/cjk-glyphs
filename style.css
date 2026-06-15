@@ -126,6 +126,17 @@ button:hover {
   color: var(--muted);
 }
 
+.glyph-table .group-start th,
+.glyph-table .group-start td {
+  border-top-width: 2px;
+}
+
+.character-cell {
+  width: 72px;
+  font-size: 32px;
+  font-weight: 700;
+}
+
 @media (max-width: 760px) {
   .controls {
     align-items: stretch;
@@ -139,7 +150,7 @@ button:hover {
   }
 
   .glyph-table {
-    min-width: 560px;
+    min-width: 820px;
   }
 
   .panel {
@@ -154,19 +165,22 @@ button:hover {
   overflow-wrap: anywhere;
 }
 
-.glyph-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  justify-content: center;
-}
-
-.glyph-option {
+.glyph-rendering {
   display: inline-flex;
-  min-width: 104px;
   flex-direction: column;
   align-items: center;
   gap: 6px;
+}
+
+.font-name {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.unavailable {
+  color: var(--muted);
+  font-size: 24px;
 }
 
 .unicode-copy {
@@ -191,6 +205,11 @@ button:hover {
   font-language-override: normal;
 }
 
+.serif.noto-jp {
+  font-family: "Noto Serif JP", serif;
+  font-language-override: normal;
+}
+
 .sans.noto-sc {
   font-family: "Noto Sans SC", sans-serif;
   font-language-override: normal;
@@ -203,6 +222,11 @@ button:hover {
 
 .sans.noto-hk {
   font-family: "Noto Sans HK", sans-serif;
+  font-language-override: normal;
+}
+
+.sans.noto-jp {
+  font-family: "Noto Sans JP", sans-serif;
   font-language-override: normal;
 }
 
